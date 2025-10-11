@@ -1,4 +1,5 @@
 {
+  "$schema": "./source/schema.json",
   "family_name": "Maple Mono",
   "use_hinted": false,
   "pool_size": 4,
