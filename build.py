@@ -41,7 +41,7 @@ from source.py.feature import (
 )
 
 
-FONT_VERSION = "v7.7"
+FONT_VERSION = "v7.8"
 # =========================================================================================
 
 
@@ -423,7 +423,7 @@ class FontConfig:
                     "line_height",
                     "github_mirror",
                     "weight_mapping",
-                    "remove_tag_ligature",
+                    "remove_tag_liga",
                     "feature_freeze",
                     "nerd_font",
                     "cn",
@@ -590,7 +590,7 @@ class FontConfig:
         else:
             return [0, self.glyph_width]
 
-    def patch_fea_string(
+    def patch_font_feature(
         self,
         font: TTFont,
         issue_fea_dir: str,
@@ -607,6 +607,7 @@ class FontConfig:
                     font,
                     fea_path,
                 )
+            self.freeze_feature_static(font, is_variable)
             return
 
         # If is hinted and keep inf liga, skip patching feature
@@ -640,6 +641,7 @@ class FontConfig:
             ]
             if is_variable
             else [],
+            remove_italic_calt=is_enable(self.feature_freeze["cv35"]),
         )
         try:
             addOpenTypeFeaturesFromString(font, fea_str)
@@ -651,6 +653,16 @@ class FontConfig:
             raise SyntaxError(
                 f"Error patching fea string: {e}\n\nSee generated fea string in {issue_fea_path}"
             ) from e
+        self.freeze_feature_static(font, is_variable)
+
+    def freeze_feature_static(self, font: TTFont, is_variable: bool):
+        if not is_variable:
+            freeze_feature(
+                font=font,
+                calt=self.enable_ligature,
+                moving_rules=get_freeze_moving_rules(),
+                config=self.feature_freeze,
+            )
 
 
 class BuildOption:
@@ -860,21 +872,6 @@ class BuildOption:
         return (
             len([f for f in listdir(dir) if end is None or f.endswith(end)]) >= minCount
         )
-
-
-def handle_ligatures(
-    font: TTFont, enable_ligature: bool, freeze_config: dict[str, str]
-):
-    """
-    whether to enable ligatures and freeze font features
-    """
-
-    freeze_feature(
-        font=font,
-        calt=enable_ligature,
-        moving_rules=get_freeze_moving_rules(),
-        config=freeze_config,
-    )
 
 
 # def instantiate_cn_var(f: TTFont, base_dir: str, output_dir: str):
@@ -1093,7 +1090,7 @@ def build_mono(f: str, font_config: FontConfig, build_option: BuildOption):
     elif style_with_prefix_space == " ExtraLight":
         font["OS/2"].usWeightClass = 275  # type: ignore
 
-    font_config.patch_fea_string(
+    font_config.patch_font_feature(
         font=font,
         issue_fea_dir=build_option.output_dir,
         is_italic=is_italic,
@@ -1101,12 +1098,6 @@ def build_mono(f: str, font_config: FontConfig, build_option: BuildOption):
         is_variable=False,
         is_hinted=False,
         fea_path=build_option.get_feature_file_path(is_italic),
-    )
-
-    handle_ligatures(
-        font=font,
-        enable_ligature=font_config.enable_ligature,
-        freeze_config=font_config.feature_freeze,
     )
 
     verify_glyph_width(
@@ -1148,7 +1139,7 @@ def build_mono_autohint(f: str, font_config: FontConfig, build_option: BuildOpti
     source_path = joinPaths(build_option.output_ttf, f)
     font = TTFont(source_path)
     is_italic = "Italic" in style_compact
-    font_config.patch_fea_string(
+    font_config.patch_font_feature(
         font=font,
         issue_fea_dir=build_option.output_dir,
         is_italic=is_italic,
@@ -1157,6 +1148,7 @@ def build_mono_autohint(f: str, font_config: FontConfig, build_option: BuildOpti
         is_hinted=True,
         fea_path=build_option.get_feature_file_path(is_italic),
     )
+
     param: dict | None = font_config.ttfautohint_param
 
     buf = BytesIO()
@@ -1365,7 +1357,7 @@ def build_cn(f: str, font_config: FontConfig, build_option: BuildOption):
     # https://github.com/subframe7536/maple-font/issues/313
     # fix_cn_cv(cn_font)
 
-    font_config.patch_fea_string(
+    font_config.patch_font_feature(
         font=cn_font,
         issue_fea_dir=build_option.output_dir,
         is_italic=is_italic,
@@ -1373,12 +1365,6 @@ def build_cn(f: str, font_config: FontConfig, build_option: BuildOption):
         is_variable=False,
         is_hinted=font_config.use_hinted,
         fea_path=build_option.get_feature_file_path(is_italic, True),
-    )
-
-    handle_ligatures(
-        font=cn_font,
-        enable_ligature=font_config.enable_ligature,
-        freeze_config=font_config.feature_freeze,
     )
 
     target_width = (
@@ -1517,7 +1503,7 @@ def build_variable_fonts(font_config: FontConfig, build_option: BuildOption):
 
         is_italic = "Italic" in input_file
 
-        font_config.patch_fea_string(
+        font_config.patch_font_feature(
             font=font,
             issue_fea_dir=build_option.output_dir,
             is_italic=is_italic,
